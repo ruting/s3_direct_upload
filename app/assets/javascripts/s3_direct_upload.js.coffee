@@ -44,9 +44,22 @@ $.fn.S3Uploader = (options) ->
           current_files.push data
           if $('#template-upload').length > 0
             data.context = $($.trim(tmpl("template-upload", file)))
+            settings.progress_bar_target.removeClass "hide" # UN-HIDE FROM VIEW
             $(data.context).appendTo(settings.progress_bar_target || $uploadForm)
           else if !settings.allow_multiple_files
             data.context = settings.progress_bar_target
+
+          $("div.status-col i.reload").eq(-1).on "click", -> # individual upload
+            # remove reload btn
+            # remove red progress-bar
+            # add a waiting progress ?? 
+            data.context.find('div.status-col i.reload').addClass "hide" # REMOVE RELOAD BUTON
+            data.context.find('div.upload_progress').removeClass "upload_progress-bar-failure" # REMOVE FAILURE PROGRESS BAR
+            data.submit()
+
+          $("div.status-col i.cancel").eq(-1).on "click", -> # individual cancel
+            $(this).parent().parent().remove()
+
           if settings.click_submit_target
             if settings.allow_multiple_files
               forms_for_submit.push data
@@ -61,7 +74,10 @@ $.fn.S3Uploader = (options) ->
       progress: (e, data) ->
         if data.context
           progress = parseInt(data.loaded / data.total * 100, 10)
-          data.context.find('.bar').css('width', progress + '%')
+          data.context.find('.upload_progress-bar').css('width', progress + '%')
+          data.context.find('div.status-col i.cancel').addClass "hide" # REMOVE CANCEL BUTON
+          data.context.find('div.status-col i.reload').addClass "hide" # REMOVE RELOAD BUTON
+          data.context.find('div.upload_progress').removeClass "upload_progress-bar-failure" # REMOVE FAILURE PROGRESS BAR
 
       done: (e, data) ->
         content = build_content_object $uploadForm, data.files[0], data.result
@@ -104,11 +120,7 @@ $.fn.S3Uploader = (options) ->
         key = $uploadForm.data("key").replace('{timestamp}', new Date().getTime()).replace('{unique_id}', @files[0].unique_id)
 
         # substitute upload timestamp and unique_id into key
-        key_field = $.grep data, (n) ->
-          n if n.name == "key"
-
-        if key_field.length > 0
-          key_field[0].value = settings.path + key
+        data[1].value = settings.path + key
 
         # IE <= 9 doesn't have XHR2 hence it can't use formData
         # replace 'key' field to submit form
@@ -119,19 +131,18 @@ $.fn.S3Uploader = (options) ->
   build_content_object = ($uploadForm, file, result) ->
     content = {}
     if result # Use the S3 response to set the URL to avoid character encodings bugs
-      content.url            = $(result).find("Location").text()
-      content.filepath       = $('<a />').attr('href', content.url)[0].pathname
-    else # IE <= 9 retu      rn a null result object so we use the file object instead
-      domain                 = $uploadForm.attr('action')
-      content.filepath       = $uploadForm.find('input[name=key]').val().replace('/${filename}', '')
-      content.url            = domain + content.filepath + '/' + encodeURIComponent(file.name)
+      content.url      = $(result).find("Location").text()
+      content.filepath = $('<a />').attr('href', content.url)[0].pathname
+    else # IE <= 9 return a null result object so we use the file object instead
+      domain           = $uploadForm.attr('action')
+      content.filepath = $uploadForm.find('input[name=key]').val().replace('/${filename}', '')
+      content.url      = domain + content.filepath + '/' + encodeURIComponent(file.name)
 
-    content.filename         = file.name
-    content.filesize         = file.size if 'size' of file
-    content.lastModifiedDate = file.lastModifiedDate if 'lastModifiedDate' of file
-    content.filetype         = file.type if 'type' of file
-    content.unique_id        = file.unique_id if 'unique_id' of file
-    content.relativePath     = build_relativePath(file) if has_relativePath(file)
+    content.filename   = file.name
+    content.filesize   = file.size if 'size' of file
+    content.filetype   = file.type if 'type' of file
+    content.unique_id  = file.unique_id if 'unique_id' of file
+    content.relativePath = build_relativePath(file) if has_relativePath(file)
     content = $.extend content, settings.additional_data if settings.additional_data
     content
 
